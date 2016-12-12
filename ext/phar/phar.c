@@ -103,7 +103,7 @@ static void phar_split_cache_list(void) /* {{{ */
 	char *key, *lasts, *end;
 	char ds[2];
 	phar_archive_data *phar;
-	uint i = 0;
+	uint32_t i = 0;
 
 	if (!PHAR_G(cache_list) || !(PHAR_G(cache_list)[0])) {
 		return;
@@ -1030,7 +1030,7 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, int fname_len, char 
 			PHAR_GET_32(buffer, len);
 		}
 	}
-	if(len > endbuffer - buffer) {
+	if(len > (size_t)(endbuffer - buffer)) {
 		MAPPHAR_FAIL("internal corruption of phar \"%s\" (trying to read past buffer end)");
 	}
 	if (phar_parse_metadata(&buffer, &mydata->metadata, len) == FAILURE) {
@@ -1071,7 +1071,7 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, int fname_len, char 
 			entry.manifest_pos = manifest_index;
 		}
 
-		if (entry.filename_len + 20 > endbuffer - buffer) {
+		if (entry.filename_len + 20 > (size_t)(endbuffer - buffer)) {
 			MAPPHAR_FAIL("internal corruption of phar \"%s\" (truncated manifest entry)");
 		}
 
@@ -1113,7 +1113,7 @@ static int phar_parse_pharfile(php_stream *fp, char *fname, int fname_len, char 
 		} else {
 			entry.metadata_len = 0;
 		}
-		if (len > endbuffer - buffer) {
+		if (len > (size_t)(endbuffer - buffer)) {
 			pefree(entry.filename, entry.is_persistent);
 			MAPPHAR_FAIL("internal corruption of phar \"%s\" (truncated manifest entry)");
 		}
@@ -1955,11 +1955,11 @@ woohoo:
 				HASH_KEY_NON_EXISTENT != zend_hash_get_current_key(&(PHAR_G(phar_fname_map)), &str_key, &unused);
 				zend_hash_move_forward(&(PHAR_G(phar_fname_map)))
 			) {
-				if (ZSTR_LEN(str_key) > (uint) filename_len) {
+				if (ZSTR_LEN(str_key) > (uint32_t) filename_len) {
 					continue;
 				}
 
-				if (!memcmp(filename, ZSTR_VAL(str_key), ZSTR_LEN(str_key)) && ((uint)filename_len == ZSTR_LEN(str_key)
+				if (!memcmp(filename, ZSTR_VAL(str_key), ZSTR_LEN(str_key)) && ((uint32_t)filename_len == ZSTR_LEN(str_key)
 					|| filename[ZSTR_LEN(str_key)] == '/' || filename[ZSTR_LEN(str_key)] == '\0')) {
 					if (NULL == (pphar = zend_hash_get_current_data_ptr(&(PHAR_G(phar_fname_map))))) {
 						break;
@@ -1974,11 +1974,11 @@ woohoo:
 					HASH_KEY_NON_EXISTENT != zend_hash_get_current_key(&cached_phars, &str_key, &unused);
 					zend_hash_move_forward(&cached_phars)
 				) {
-					if (ZSTR_LEN(str_key) > (uint) filename_len) {
+					if (ZSTR_LEN(str_key) > (uint32_t) filename_len) {
 						continue;
 					}
 
-					if (!memcmp(filename, ZSTR_VAL(str_key), ZSTR_LEN(str_key)) && ((uint)filename_len == ZSTR_LEN(str_key)
+					if (!memcmp(filename, ZSTR_VAL(str_key), ZSTR_LEN(str_key)) && ((uint32_t)filename_len == ZSTR_LEN(str_key)
 						|| filename[ZSTR_LEN(str_key)] == '/' || filename[ZSTR_LEN(str_key)] == '\0')) {
 						if (NULL == (pphar = zend_hash_get_current_data_ptr(&cached_phars))) {
 							break;
@@ -2185,6 +2185,14 @@ int phar_split_fname(const char *filename, int filename_len, char **arch, int *a
 	char *save;
 #endif
 	int ext_len;
+
+	if (CHECK_NULL_PATH(filename, filename_len)) {
+		return FAILURE;
+	}
+
+	if (CHECK_NULL_PATH(filename, filename_len)) {
+		return FAILURE;
+	}
 
 	if (!strncasecmp(filename, "phar://", 7)) {
 		filename += 7;
@@ -3262,19 +3270,31 @@ static zend_op_array *phar_compile_file(zend_file_handle *file_handle, int type)
 
 				/* zip or tar-based phar */
 				spprintf(&name, 4096, "phar://%s/%s", file_handle->filename, ".phar/stub.php");
-				if (SUCCESS == phar_orig_zend_open((const char *)name, file_handle)) {
+				if (SUCCESS == phar_orig_zend_open((const char *)name, &f)) {
+
 					efree(name);
 					name = NULL;
-					file_handle->filename = f.filename;
-					if (file_handle->opened_path) {
-						efree(file_handle->opened_path);
+
+					f.filename = file_handle->filename;
+					if (f.opened_path) {
+						efree(f.opened_path);
 					}
-					file_handle->opened_path = f.opened_path;
-					file_handle->free_filename = f.free_filename;
-				} else {
+					f.opened_path = file_handle->opened_path;
+					f.free_filename = file_handle->free_filename;
+
+					switch (file_handle->type) {
+						case ZEND_HANDLE_STREAM:
+						case ZEND_HANDLE_MAPPED:
+							if (file_handle->handle.stream.closer && file_handle->handle.stream.handle) {
+								file_handle->handle.stream.closer(file_handle->handle.stream.handle);
+							}
+							file_handle->handle.stream.handle = NULL;
+							break;
+					}
 					*file_handle = f;
 				}
 			} else if (phar->flags & PHAR_FILE_COMPRESSION_MASK) {
+				zend_file_handle_dtor(file_handle);
 				/* compressed phar */
 				file_handle->type = ZEND_HANDLE_STREAM;
 				/* we do our own reading directly from the phar, don't change the next line */
@@ -3465,7 +3485,7 @@ void phar_request_initialize(void) /* {{{ */
 
 PHP_RSHUTDOWN_FUNCTION(phar) /* {{{ */
 {
-	int i;
+	uint32_t i;
 
 	PHAR_G(request_ends) = 1;
 
