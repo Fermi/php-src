@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 7                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2016 The PHP Group                                |
+   | Copyright (c) 1997-2017 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -12,9 +12,9 @@
    | obtain it through the world-wide-web, please send a note to          |
    | license@php.net so we can mail you a copy immediately.               |
    +----------------------------------------------------------------------+
-   | Authors: Stig Sæther Bakken <ssb@php.net>                            |
+   | Authors: Stig SÃ¦ther Bakken <ssb@php.net>                            |
    |          Andreas Karajannis <Andreas.Karajannis@gmd.de>              |
-   |	      Kevin N. Shallow <kshallow@tampabay.rr.com> (Birdstep)      |
+   |	      Kevin N. Shallow <kshallow@tampabay.rr.com>                 |
    +----------------------------------------------------------------------+
 */
 
@@ -149,23 +149,6 @@ PHP_FUNCTION(solid_fetch_prev);
 #ifndef SQLUSMALLINT
 #define SQLUSMALLINT UWORD
 #endif
-
-#elif defined(HAVE_BIRDSTEP) /* Raima Birdstep */
-
-#define ODBC_TYPE "Birdstep"
-#define UNIX
-/*
- * Extended Fetch in the Birdstep ODBC API is incapable of returning zend_long varchar (memo) fields.
- * So the following line has been commented-out to accommodate. - KNS
- *
- * #define HAVE_SQL_EXTENDED_FETCH 1
- */
-#include <sql.h>
-#include <sqlext.h>
-#define SQLINTEGER SDWORD
-#define SQLSMALLINT SWORD
-#define SQLUSMALLINT UWORD
-
 
 #elif defined(HAVE_DBMAKER) /* DBMaker */
 

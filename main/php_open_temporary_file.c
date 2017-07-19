@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 7                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2016 The PHP Group                                |
+   | Copyright (c) 1997-2017 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -114,7 +114,7 @@ static int php_do_open_temporary_file(const char *path, const char *pfx, zend_st
 	}
 
 #ifdef PHP_WIN32
-	if (!php_win32_check_trailing_space(pfx, (const int)strlen(pfx))) {
+	if (!php_win32_check_trailing_space(pfx, strlen(pfx))) {
 		SetLastError(ERROR_INVALID_NAME);
 		return -1;
 	}

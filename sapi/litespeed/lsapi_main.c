@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 7                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2016 The PHP Group                                |
+   | Copyright (c) 1997-2017 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -404,17 +404,26 @@ static void log_message (const char *fmt, ...)
 #define DEBUG_MESSAGE(fmt, ...)
 #endif
 
+static int lsapi_activate_user_ini(TSRMLS_D);
+
+static int sapi_lsapi_activate(TSRMLS_D)
+{
+    if (parse_user_ini && lsapi_activate_user_ini(TSRMLS_C) == FAILURE) {
+        return FAILURE;
+    }
+    return SUCCESS;
+}
 /* {{{ sapi_module_struct cgi_sapi_module
  */
 static sapi_module_struct lsapi_sapi_module =
 {
     "litespeed",
-    "LiteSpeed V6.10",
+    "LiteSpeed V6.11",
 
     php_lsapi_startup,              /* startup */
     php_module_shutdown_wrapper,    /* shutdown */
 
-    NULL,                           /* activate */
+    sapi_lsapi_activate,            /* activate */
     sapi_lsapi_deactivate,          /* deactivate */
 
     sapi_lsapi_ub_write,            /* unbuffered write */
@@ -540,8 +549,6 @@ static int lsapi_execute_script( zend_file_handle * file_handle)
 
 }
 
-static int lsapi_activate_user_ini();
-
 static int lsapi_module_main(int show_source)
 {
     zend_file_handle file_handle = {0};
@@ -550,10 +557,6 @@ static int lsapi_module_main(int show_source)
         return -1;
     }
     
-    if (parse_user_ini && lsapi_activate_user_ini() == FAILURE) {
-        return -1;
-    }
-
     if (show_source) {
         zend_syntax_highlighter_ini syntax_highlighter_ini;
 
@@ -577,10 +580,15 @@ static int alter_ini( const char * pKey, int keyLen, const char * pValue, int va
     zend_string * psKey;
 #endif
     int type = ZEND_INI_PERDIR;
+    int stage = PHP_INI_STAGE_RUNTIME;
     if ( '\001' == *pKey ) {
         ++pKey;
         if ( *pKey == 4 ) {
             type = ZEND_INI_SYSTEM;
+        }
+        else
+        {
+            stage = PHP_INI_STAGE_HTACCESS;
         }
         ++pKey;
         --keyLen;
@@ -596,12 +604,12 @@ static int alter_ini( const char * pKey, int keyLen, const char * pValue, int va
             psKey = zend_string_init(pKey, keyLen, 1);
             zend_alter_ini_entry_chars(psKey,
                              (char *)pValue, valLen,
-                             type, PHP_INI_STAGE_ACTIVATE);
+                             type, stage);
             zend_string_release(psKey);
 #else
             zend_alter_ini_entry((char *)pKey, keyLen,
                              (char *)pValue, valLen,
-                             type, PHP_INI_STAGE_ACTIVATE);
+                             type, stage);
 #endif
         }
     }
@@ -687,7 +695,7 @@ static void walk_down_the_path(char* path_start,
 
 typedef struct {
     char *path;
-    uint path_len;
+    uint32_t path_len;
     char *doc_root;
     user_config_cache_entry *entry;
 } _lsapi_activate_user_ini_ctx;
@@ -731,8 +739,6 @@ static int lsapi_activate_user_ini_mk_path(_lsapi_activate_user_ini_ctx *ctx,
     /* Extract dir name from path_translated * and store it in 'path' */
     ctx->path_len = strlen(ctx->path);
     path = ctx->path = estrndup(SG(request_info).path_translated, ctx->path_len);
-    if (!path)
-        return FAILURE;
     ctx->path_len = zend_dirname(path, ctx->path_len);
     DEBUG_MESSAGE("dirname: %s", ctx->path);
 
@@ -816,7 +822,7 @@ static int lsapi_activate_user_ini_walk_down_the_path(_lsapi_activate_user_ini_c
                                                       void* next)
 {
     time_t request_time = sapi_get_request_time();
-    uint path_len, docroot_len;
+    uint32_t path_len, docroot_len;
     int rc = SUCCESS;
     fn_activate_user_ini_chain_t *fn_next = next;
 
@@ -865,7 +871,7 @@ static int lsapi_activate_user_ini_finally(_lsapi_activate_user_ini_ctx *ctx,
     return rc;
 }
 
-static int lsapi_activate_user_ini(TSRMLS_D)
+static int lsapi_activate_user_ini( void )
 {
     _lsapi_activate_user_ini_ctx ctx;
     /**
@@ -1083,9 +1089,9 @@ static int cli_main( int argc, char * argv[] )
             case 'v':
                 if (php_request_startup() != FAILURE) {
 #if ZEND_DEBUG
-                    php_printf("PHP %s (%s) (built: %s %s) (DEBUG)\nCopyright (c) 1997-2016 The PHP Group\n%s", PHP_VERSION, sapi_module.name, __DATE__, __TIME__, get_zend_version());
+                    php_printf("PHP %s (%s) (built: %s %s) (DEBUG)\nCopyright (c) 1997-2017 The PHP Group\n%s", PHP_VERSION, sapi_module.name, __DATE__, __TIME__, get_zend_version());
 #else
-                    php_printf("PHP %s (%s) (built: %s %s)\nCopyright (c) 1997-2016 The PHP Group\n%s", PHP_VERSION, sapi_module.name, __DATE__, __TIME__, get_zend_version());
+                    php_printf("PHP %s (%s) (built: %s %s)\nCopyright (c) 1997-2017 The PHP Group\n%s", PHP_VERSION, sapi_module.name, __DATE__, __TIME__, get_zend_version());
 #endif
 #ifdef PHP_OUTPUT_NEWAPI
                     php_output_end_all();

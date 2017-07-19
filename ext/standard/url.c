@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 7                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2016 The PHP Group                                |
+   | Copyright (c) 1997-2017 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -112,6 +112,10 @@ PHPAPI php_url *php_url_parse_ex(char const *str, size_t length)
 			if (!isalpha(*p) && !isdigit(*p) && *p != '+' && *p != '.' && *p != '-') {
 				if (e + 1 < ue && e < s + strcspn(s, "?#")) {
 					goto parse_port;
+				} else if (s + 1 < ue && *s == '/' && *(s + 1) == '/') { /* relative-scheme URL */
+					s += 2;
+					e = 0;
+					goto parse_host;
 				} else {
 					goto just_path;
 				}
@@ -208,6 +212,7 @@ PHPAPI php_url *php_url_parse_ex(char const *str, size_t length)
 		goto just_path;
 	}
 
+	parse_host:
 	/* Binary-safe strcspn(s, "/?#") */
 	e = ue;
 	if ((p = memchr(s, '/', e - s))) {
@@ -335,10 +340,13 @@ PHP_FUNCTION(parse_url)
 	size_t str_len;
 	php_url *resource;
 	zend_long key = -1;
+	zval tmp;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "s|l", &str, &str_len, &key) == FAILURE) {
-		return;
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_STRING(str, str_len)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG(key)
+	ZEND_PARSE_PARAMETERS_END();
 
 	resource = php_url_parse_ex(str, str_len);
 	if (resource == NULL) {
@@ -383,22 +391,38 @@ PHP_FUNCTION(parse_url)
 	array_init(return_value);
 
     /* add the various elements to the array */
-	if (resource->scheme != NULL)
-		add_assoc_string(return_value, "scheme", resource->scheme);
-	if (resource->host != NULL)
-		add_assoc_string(return_value, "host", resource->host);
-	if (resource->port != 0)
-		add_assoc_long(return_value, "port", resource->port);
-	if (resource->user != NULL)
-		add_assoc_string(return_value, "user", resource->user);
-	if (resource->pass != NULL)
-		add_assoc_string(return_value, "pass", resource->pass);
-	if (resource->path != NULL)
-		add_assoc_string(return_value, "path", resource->path);
-	if (resource->query != NULL)
-		add_assoc_string(return_value, "query", resource->query);
-	if (resource->fragment != NULL)
-		add_assoc_string(return_value, "fragment", resource->fragment);
+	if (resource->scheme != NULL) {
+		ZVAL_STRING(&tmp, resource->scheme);
+		zend_hash_add_new(Z_ARRVAL_P(return_value), ZSTR_KNOWN(ZEND_STR_SCHEME), &tmp);
+	}
+	if (resource->host != NULL) {
+		ZVAL_STRING(&tmp, resource->host);
+		zend_hash_add_new(Z_ARRVAL_P(return_value), ZSTR_KNOWN(ZEND_STR_HOST), &tmp);
+	}
+	if (resource->port != 0) {
+		ZVAL_LONG(&tmp, resource->port);
+		zend_hash_add_new(Z_ARRVAL_P(return_value), ZSTR_KNOWN(ZEND_STR_PORT), &tmp);
+	}
+	if (resource->user != NULL) {
+		ZVAL_STRING(&tmp, resource->user);
+		zend_hash_add_new(Z_ARRVAL_P(return_value), ZSTR_KNOWN(ZEND_STR_USER), &tmp);
+	}
+	if (resource->pass != NULL) {
+		ZVAL_STRING(&tmp, resource->pass);
+		zend_hash_add_new(Z_ARRVAL_P(return_value), ZSTR_KNOWN(ZEND_STR_PASS), &tmp);
+	}
+	if (resource->path != NULL) {
+		ZVAL_STRING(&tmp, resource->path);
+		zend_hash_add_new(Z_ARRVAL_P(return_value), ZSTR_KNOWN(ZEND_STR_PATH), &tmp);
+	}
+	if (resource->query != NULL) {
+		ZVAL_STRING(&tmp, resource->query);
+		zend_hash_add_new(Z_ARRVAL_P(return_value), ZSTR_KNOWN(ZEND_STR_QUERY), &tmp);
+	}
+	if (resource->fragment != NULL) {
+		ZVAL_STRING(&tmp, resource->fragment);
+		zend_hash_add_new(Z_ARRVAL_P(return_value), ZSTR_KNOWN(ZEND_STR_FRAGMENT), &tmp);
+	}
 done:
 	php_url_free(resource);
 }
@@ -655,9 +679,12 @@ PHP_FUNCTION(get_headers)
 	zval *zcontext = NULL;
 	php_stream_context *context;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "s|lr!", &url, &url_len, &format, &zcontext) == FAILURE) {
-		return;
-	}
+	ZEND_PARSE_PARAMETERS_START(1, 3)
+		Z_PARAM_STRING(url, url_len)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG(format)
+		Z_PARAM_RESOURCE_EX(zcontext, 1, 0)
+	ZEND_PARSE_PARAMETERS_END();
 
 	context = php_stream_context_from_zval(zcontext, 0);
 

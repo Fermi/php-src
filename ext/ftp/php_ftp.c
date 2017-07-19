@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 7                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2016 The PHP Group                                |
+   | Copyright (c) 1997-2017 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -115,6 +115,11 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_ftp_rawlist, 0, 0, 2)
 	ZEND_ARG_INFO(0, ftp)
 	ZEND_ARG_INFO(0, directory)
 	ZEND_ARG_INFO(0, recursive)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO(arginfo_ftp_mlsd, 0)
+	ZEND_ARG_INFO(0, ftp)
+	ZEND_ARG_INFO(0, directory)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO(arginfo_ftp_systype, 0)
@@ -254,6 +259,7 @@ const zend_function_entry php_ftp_functions[] = {
 	PHP_FE(ftp_alloc,			arginfo_ftp_alloc)
 	PHP_FE(ftp_nlist,			arginfo_ftp_nlist)
 	PHP_FE(ftp_rawlist,			arginfo_ftp_rawlist)
+	PHP_FE(ftp_mlsd,			arginfo_ftp_mlsd)
 	PHP_FE(ftp_systype,			arginfo_ftp_systype)
 	PHP_FE(ftp_pasv,			arginfo_ftp_pasv)
 	PHP_FE(ftp_get,				arginfo_ftp_get)
@@ -744,6 +750,43 @@ PHP_FUNCTION(ftp_rawlist)
 	for (ptr = llist; *ptr; ptr++) {
 		add_next_index_string(return_value, *ptr);
 	}
+	efree(llist);
+}
+/* }}} */
+
+/* {{{ proto array ftp_mlsd(resource stream, string directory)
+   Returns a detailed listing of a directory as an array of parsed output lines */
+PHP_FUNCTION(ftp_mlsd)
+{
+	zval		*z_ftp;
+	ftpbuf_t	*ftp;
+	char		**llist, **ptr, *dir;
+	size_t		dir_len;
+	zval		entry;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS(), "rs", &z_ftp, &dir, &dir_len) == FAILURE) {
+		return;
+	}
+
+	if ((ftp = (ftpbuf_t *)zend_fetch_resource(Z_RES_P(z_ftp), le_ftpbuf_name, le_ftpbuf)) == NULL) {
+		RETURN_FALSE;
+	}
+
+	/* get raw directory listing */
+	if (NULL == (llist = ftp_mlsd(ftp, dir, dir_len))) {
+		RETURN_FALSE;
+	}
+
+	array_init(return_value);
+	for (ptr = llist; *ptr; ptr++) {
+		array_init(&entry);
+		if (ftp_mlsd_parse_line(Z_ARRVAL_P(&entry), *ptr) == SUCCESS) {
+			zend_hash_next_index_insert(Z_ARRVAL_P(return_value), &entry);
+		} else {
+			zval_ptr_dtor(&entry);
+		}
+	}
+
 	efree(llist);
 }
 /* }}} */
