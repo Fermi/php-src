@@ -3173,7 +3173,7 @@ static int zend_update_type_info(const zend_op_array *op_array,
 			UPDATE_SSA_TYPE(MAY_BE_LONG, ssa_ops[i].result_def);
 			break;
 		case ZEND_FUNC_GET_ARGS:
-			UPDATE_SSA_TYPE(MAY_BE_ARRAY | MAY_BE_ARRAY_KEY_LONG | MAY_BE_ARRAY_OF_ANY, ssa_ops[i].result_def);
+			UPDATE_SSA_TYPE(MAY_BE_RC1| MAY_BE_ARRAY | MAY_BE_ARRAY_KEY_LONG | MAY_BE_ARRAY_OF_ANY, ssa_ops[i].result_def);
 			break;
 		case ZEND_GET_CLASS:
 		case ZEND_GET_CALLED_CLASS:
@@ -3291,9 +3291,11 @@ int zend_infer_types_ex(const zend_op_array *op_array, const zend_script *script
 	zend_ssa_var_info *ssa_var_info = ssa->var_info;
 	int ssa_vars_count = ssa->vars_count;
 	int i, j;
-	uint32_t tmp;
+	uint32_t tmp, worklist_len = zend_bitset_len(ssa_vars_count);
 
-	WHILE_WORKLIST(worklist, zend_bitset_len(ssa_vars_count), j) {
+	while (!zend_bitset_empty(worklist, worklist_len)) {
+		j = zend_bitset_first(worklist, worklist_len);
+		zend_bitset_excl(worklist, j);
 		if (ssa_vars[j].definition_phi) {
 			zend_ssa_phi *p = ssa_vars[j].definition_phi;
 			if (p->pi >= 0) {
@@ -3353,7 +3355,7 @@ int zend_infer_types_ex(const zend_op_array *op_array, const zend_script *script
 				return FAILURE;
 			}
 		}
-	} WHILE_WORKLIST_END();
+	}
 	return SUCCESS;
 }
 

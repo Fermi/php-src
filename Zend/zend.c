@@ -75,7 +75,7 @@ ZEND_API void (*zend_error_cb)(int type, const char *error_filename, const uint3
 void (*zend_printf_to_smart_string)(smart_string *buf, const char *format, va_list ap);
 void (*zend_printf_to_smart_str)(smart_str *buf, const char *format, va_list ap);
 ZEND_API char *(*zend_getenv)(char *name, size_t name_len);
-ZEND_API zend_string *(*zend_resolve_path)(const char *filename, int filename_len);
+ZEND_API zend_string *(*zend_resolve_path)(const char *filename, size_t filename_len);
 
 void (*zend_on_timeout)(int seconds);
 
@@ -130,7 +130,7 @@ static ZEND_INI_MH(OnUpdateAssertions) /* {{{ */
 
 	p = (zend_long *) (base+(size_t) mh_arg1);
 
-	val = zend_atol(ZSTR_VAL(new_value), (int)ZSTR_LEN(new_value));
+	val = zend_atol(ZSTR_VAL(new_value), ZSTR_LEN(new_value));
 
 	if (stage != ZEND_INI_STAGE_STARTUP &&
 	    stage != ZEND_INI_STAGE_SHUTDOWN &&
@@ -717,6 +717,10 @@ int zend_startup(zend_utility_functions *utility_functions, char **extensions) /
 	extern zend_php_scanner_globals language_scanner_globals;
 #endif
 
+#ifdef ZEND_WIN32
+	php_win32_cp_set_by_id(65001);
+#endif
+
 	start_memory_manager();
 
 	virtual_cwd_startup(); /* Could use shutdown to free the main cwd but it would just slow it down for CGI */
@@ -769,7 +773,7 @@ int zend_startup(zend_utility_functions *utility_functions, char **extensions) /
 	zend_compile_file = compile_file;
 	zend_execute_ex = execute_ex;
 	zend_execute_internal = NULL;
-#endif /* HAVE_SYS_SDT_H */
+#endif /* HAVE_DTRACE */
 	zend_compile_string = compile_string;
 	zend_throw_exception_hook = NULL;
 

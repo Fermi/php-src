@@ -157,7 +157,7 @@ static PHP_INI_MH(OnSetSerializePrecision)
 static PHP_INI_MH(OnChangeMemoryLimit)
 {
 	if (new_value) {
-		PG(memory_limit) = zend_atol(ZSTR_VAL(new_value), (int)ZSTR_LEN(new_value));
+		PG(memory_limit) = zend_atol(ZSTR_VAL(new_value), ZSTR_LEN(new_value));
 	} else {
 		PG(memory_limit) = 1<<30;		/* effectively, no limit */
 	}
@@ -310,7 +310,7 @@ static PHP_INI_MH(OnUpdateTimeout)
 
 /* {{{ php_get_display_errors_mode() helper function
  */
-static int php_get_display_errors_mode(char *value, int value_length)
+static int php_get_display_errors_mode(char *value, size_t value_length)
 {
 	int mode;
 
@@ -343,7 +343,7 @@ static int php_get_display_errors_mode(char *value, int value_length)
  */
 static PHP_INI_MH(OnUpdateDisplayErrors)
 {
-	PG(display_errors) = (zend_bool) php_get_display_errors_mode(ZSTR_VAL(new_value), (int)ZSTR_LEN(new_value));
+	PG(display_errors) = (zend_bool) php_get_display_errors_mode(ZSTR_VAL(new_value), ZSTR_LEN(new_value));
 
 	return SUCCESS;
 }
@@ -353,15 +353,16 @@ static PHP_INI_MH(OnUpdateDisplayErrors)
  */
 static PHP_INI_DISP(display_errors_mode)
 {
-	int mode, tmp_value_length, cgi_or_cli;
+	int mode, cgi_or_cli;
+	size_t tmp_value_length;
 	char *tmp_value;
 
 	if (type == ZEND_INI_DISPLAY_ORIG && ini_entry->modified) {
 		tmp_value = (ini_entry->orig_value ? ZSTR_VAL(ini_entry->orig_value) : NULL );
-		tmp_value_length = (int)(ini_entry->orig_value? ZSTR_LEN(ini_entry->orig_value) : 0);
+		tmp_value_length = (ini_entry->orig_value? ZSTR_LEN(ini_entry->orig_value) : 0);
 	} else if (ini_entry->value) {
 		tmp_value = ZSTR_VAL(ini_entry->value);
-		tmp_value_length = (int)ZSTR_LEN(ini_entry->value);
+		tmp_value_length = ZSTR_LEN(ini_entry->value);
 	} else {
 		tmp_value = NULL;
 		tmp_value_length = 0;
@@ -756,10 +757,10 @@ PHPAPI ZEND_COLD void php_verror(const char *docref, const char *params, int typ
 	buffer_len = (int)vspprintf(&buffer, 0, format, args);
 
 	if (PG(html_errors)) {
-		replace_buffer = php_escape_html_entities((unsigned char*)buffer, buffer_len, 0, ENT_COMPAT, NULL);
+		replace_buffer = php_escape_html_entities((unsigned char*)buffer, buffer_len, 0, ENT_COMPAT, SG(default_charset));
 		/* Retry with substituting invalid chars on fail. */
 		if (!replace_buffer || ZSTR_LEN(replace_buffer) < 1) {
-			replace_buffer = php_escape_html_entities((unsigned char*)buffer, buffer_len, 0, ENT_COMPAT | ENT_HTML_SUBSTITUTE_ERRORS, NULL);
+			replace_buffer = php_escape_html_entities((unsigned char*)buffer, buffer_len, 0, ENT_COMPAT | ENT_HTML_SUBSTITUTE_ERRORS, SG(default_charset));
 		}
 
 		efree(buffer);
@@ -826,7 +827,7 @@ PHPAPI ZEND_COLD void php_verror(const char *docref, const char *params, int typ
 	}
 
 	if (PG(html_errors)) {
-		replace_origin = php_escape_html_entities((unsigned char*)origin, origin_len, 0, ENT_COMPAT, NULL);
+		replace_origin = php_escape_html_entities((unsigned char*)origin, origin_len, 0, ENT_COMPAT, SG(default_charset));
 		efree(origin);
 		origin = ZSTR_VAL(replace_origin);
 	}
@@ -981,10 +982,10 @@ PHPAPI ZEND_COLD void php_win32_docref2_from_error(DWORD error, const char *para
 		php_error_docref2(NULL, param1, param2, E_WARNING, "%s", strerror(errno));
 	} else {
 		char buf[PHP_WIN32_ERROR_MSG_BUFFER_SIZE + 1];
-		int buf_len;
+		size_t buf_len;
 
 		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, error, 0, buf, PHP_WIN32_ERROR_MSG_BUFFER_SIZE, NULL);
-		buf_len = (int)strlen(buf);
+		buf_len = strlen(buf);
 		if (buf_len >= 2) {
 			buf[buf_len - 1] = '\0';
 			buf[buf_len - 2] = '\0';
@@ -1148,7 +1149,7 @@ static ZEND_COLD void php_error_cb(int type, const char *error_filename, const u
 
 				if (PG(html_errors)) {
 					if (type == E_ERROR || type == E_PARSE) {
-						zend_string *buf = php_escape_html_entities((unsigned char*)buffer, buffer_len, 0, ENT_COMPAT, NULL);
+						zend_string *buf = php_escape_html_entities((unsigned char*)buffer, buffer_len, 0, ENT_COMPAT, SG(default_charset));
 						php_printf("%s<br />\n<b>%s</b>:  %s in <b>%s</b> on line <b>%d</b><br />\n%s", STR_PRINT(prepend_string), error_type_str, ZSTR_VAL(buf), error_filename, error_lineno, STR_PRINT(append_string));
 						zend_string_free(buf);
 					} else {
@@ -1427,7 +1428,7 @@ PHPAPI int php_stream_open_for_zend_ex(const char *filename, zend_file_handle *h
 }
 /* }}} */
 
-static zend_string *php_resolve_path_for_zend(const char *filename, int filename_len) /* {{{ */
+static zend_string *php_resolve_path_for_zend(const char *filename, size_t filename_len) /* {{{ */
 {
 	return php_resolve_path(filename, filename_len, PG(include_path));
 }
@@ -2111,6 +2112,7 @@ int php_module_startup(sapi_module_struct *sf, zend_module_entry *additional_mod
 	ts_allocate_id(&php_win32_core_globals_id, sizeof(php_win32_core_globals), (ts_allocate_ctor) php_win32_core_globals_ctor, (ts_allocate_dtor) php_win32_core_globals_dtor);
 #endif
 #else
+	memset(&core_globals, 0, sizeof(core_globals));
 	php_startup_ticks();
 #endif
 	gc_globals_ctor();
@@ -2228,6 +2230,20 @@ int php_module_startup(sapi_module_struct *sf, zend_module_entry *additional_mod
 
 	/* Register Zend ini entries */
 	zend_register_standard_ini_entries();
+
+#ifdef ZEND_WIN32
+	/* Until the current ini values was setup, the current cp is 65001.
+		If the actual ini vaues are different, some stuff needs to be updated.
+		It concerns at least main_cwd_state and there might be more. As we're
+		still in the startup phase, lets use the chance and reinit the relevant
+		item according to the current codepage. Still, if ini_set() is used
+		later on, a more intelligent way to update such stuff is needed.
+		Startup/shutdown routines could involve touching globals and thus
+		can't always be used on demand. */
+	if (!php_win32_cp_use_unicode()) {
+		virtual_cwd_main_cwd_init(1);
+	}
+#endif
 
 	/* Disable realpath cache if an open_basedir is set */
 	if (PG(open_basedir) && *PG(open_basedir)) {
